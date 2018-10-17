@@ -1,0 +1,55 @@
+---
+- hosts: all
+  remote_user: root
+  become: true
+  # vars:
+  #   docker_edition: 'ce'
+  #   docker_package: "docker-{{ docker_edition }}"
+  #   docker_package_state: present
+  vars:
+    host_cert: "{{ lookup('file', playbook_dir + '/../miscellaneous/host-cert.pem') }}"
+  roles:
+  - local-misc
+  - docker
+
+- hosts: admin_swarm
+  remote_user: root
+  become: true
+  vars:
+#    host_cert: "{{ lookup('file', playbook_dir + '/../miscellaneous/host-cert.pem') }}"
+    host_key:  "{{ lookup('file', playbook_dir + '/../miscellaneous/host-key.pem') }}"
+    jenkinsUser: admin
+    jenkinsPassword: password
+  roles:
+  - docker-first-manager
+  - jenkins-master
+  - docker-registry
+
+- hosts: jenkins_worker
+  remote_user: root
+  become: true
+  vars:
+    jenkinsUser: admin
+    jenkinsPassword: password
+  roles:
+  - jenkins-worker
+
+- hosts: iam_swarm_mngr
+  remote_user: root
+  become: true
+  vars:
+    jenkinsUser: admin
+    jenkinsPassword: password
+  roles:
+  - docker-first-manager
+  - visualizer-deployment
+  - ldap-deployment
+  - idp-deployment
+
+- hosts: iam_swarm_wrkr
+  vars:
+    first_manager_name: iam-swarm-mngr-1
+  remote_user: root
+  become: true
+  roles:
+  - docker-worker

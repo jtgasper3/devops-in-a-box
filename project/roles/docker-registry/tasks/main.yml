@@ -1,0 +1,83 @@
+---
+- name: Creates directory
+  file:
+    path: /var/docker-data/registry
+    state: directory
+
+- name: Creates registry data directory
+  file:
+    path: /var/docker-data/registry/data
+    state: directory
+#    owner: "1500"
+#    group: "1500"
+
+- name: Creates registry data directory
+  file:
+    path: /var/docker-data/registry/users
+    state: directory
+
+#- name: Creates registry data directory
+#  file:
+#    path: /var/docker-data/registry/users/htpasswd
+#    state: touch
+
+- name: "get docker configs"
+  shell: docker config ls
+  register: docker_config_ls
+  changed_when: false
+
+- name: Create host cert Docker config
+  command: docker config create host.crt -
+  args:
+    stdin: "{{ host_cert }}"
+  when: docker_config_ls.stdout.find('host.crt') == -1
+
+- name: "get docker secrets"
+  shell: docker secret ls
+  register: docker_secret_ls
+  changed_when: false
+
+- name: Create host key Docker secret
+  command: docker secret create host.key -
+  args:
+    stdin: "{{ host_key }}"
+  when: docker_secret_ls.stdout.find('host.key') == -1
+
+- name: "get docker services"
+  shell: docker service ls
+  register: docker_service_ls
+  changed_when: false
+
+# - name: "Start the Registry Service"
+#   shell: |
+#     docker service create \
+#      --name registry \
+#      --config host.crt \
+#      --secret host.key \
+#      --mount type=bind,src=/var/docker-data/registry/data,dst=/var/lib/registry \
+#      --mount type=bind,src=/var/docker-data/registry/users/htpasswd,dst=/auth/htpasswd \
+#      -e REGISTRY_HTTP_ADDR=0.0.0.0:443 \
+#      -e REGISTRY_HTTP_TLS_CERTIFICATE=/host.crt \
+#      -e REGISTRY_HTTP_TLS_KEY=/run/secrets/host.key \
+#      -e REGISTRY_AUTH=htpasswd \
+#      -e REGISTRY_AUTH_HTPASSWD_REALM="Registry Realm" \
+#      -e REGISTRY_AUTH_HTPASSWD_PATH=/auth/htpasswd \
+#      --publish published=443,target=443 \
+#      --replicas 1 \
+#      registry:2
+#   when: docker_service_ls.stdout.find('registry') == -1
+
+- name: "Start the Registry Service"
+  shell: |
+    docker service create \
+     --name registry \
+     --config host.crt \
+     --secret host.key \
+     --mount type=bind,src=/var/docker-data/registry/data,dst=/var/lib/registry \
+     -e REGISTRY_HTTP_ADDR=0.0.0.0:443 \
+     -e REGISTRY_HTTP_TLS_CERTIFICATE=/host.crt \
+     -e REGISTRY_HTTP_TLS_KEY=/run/secrets/host.key \
+     --publish published=443,target=443 \
+     --replicas 1 \
+     registry:2
+  when: docker_service_ls.stdout.find('registry') == -1

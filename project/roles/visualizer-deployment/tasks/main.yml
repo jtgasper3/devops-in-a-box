@@ -1,0 +1,15 @@
+---
+
+- name: "get docker services"
+  shell: docker service ls
+  register: docker_service_ls
+  changed_when: false
+
+- name: "Start the Visualizer service"
+  shell: |
+    docker service create --name visualizer \
+      --constraint node.role == manager \
+      --publish 8080:8080 \
+      --mount type=bind,src=/var/run/docker.sock,dst=/var/run/docker.sock \
+      dockersamples/visualizer:stable
+  when: docker_service_ls.stdout.find('visualizer') == -1

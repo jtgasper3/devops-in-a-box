@@ -1,0 +1,160 @@
+---
+- name: Check the status of the Jenkins IdP project
+  uri:
+    url: "https://10.211.56.10:8443/job/idp-in-a-box/"
+    status_code: 200, 403, 404
+    user: "{{ jenkinsUser }}"
+    password: "{{ jenkinsPassword }}"
+    force_basic_auth: yes
+    validate_certs: False
+  register: project_result
+
+- name: Create a Jenkins IdP project
+  uri:
+    url: https://10.211.56.10:8443/createItem?name=idp-in-a-box
+    method: POST
+    user: "{{ jenkinsUser }}"
+    password: "{{ jenkinsPassword }}"
+    body: >
+        <?xml version='1.1' encoding='UTF-8'?>
+        <flow-definition plugin="workflow-job@2.24">
+          <actions/>
+          <description></description>
+          <keepDependencies>false</keepDependencies>
+          <properties>
+            <com.coravy.hudson.plugins.github.GithubProjectProperty plugin="github@1.29.2">
+              <projectUrl>https://github.com/jtgasper3/devops-in-a-box-idp/</projectUrl>
+              <displayName>IdP In a Box</displayName>
+            </com.coravy.hudson.plugins.github.GithubProjectProperty>
+          </properties>
+          <definition class="org.jenkinsci.plugins.workflow.cps.CpsScmFlowDefinition" plugin="workflow-cps@2.54">
+            <scm class="hudson.plugins.git.GitSCM" plugin="git@3.9.1">
+              <configVersion>2</configVersion>
+              <userRemoteConfigs>
+                <hudson.plugins.git.UserRemoteConfig>
+                  <url>https://github.com/jtgasper3/devops-in-a-box-idp.git</url>
+                </hudson.plugins.git.UserRemoteConfig>
+              </userRemoteConfigs>
+              <branches>
+                <hudson.plugins.git.BranchSpec>
+                  <name>*/master</name>
+                </hudson.plugins.git.BranchSpec>
+              </branches>
+              <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
+              <submoduleCfg class="list"/>
+              <extensions/>
+            </scm>
+            <scriptPath>Jenkinsfile</scriptPath>
+            <lightweight>true</lightweight>
+          </definition>
+          <triggers/>
+          <disabled>false</disabled>
+        </flow-definition>
+    force_basic_auth: yes
+    headers:
+      Content-Type: "application/xml"
+    #status_code: 201
+    #body_format: json
+    validate_certs: no
+  when: project_result.status == 404
+
+- name: "get docker configs"
+  shell: docker config ls
+  register: docker_config_ls
+  changed_when: false
+
+- name: Create sealer.kver Docker config
+  command: docker config create idp_sealer_kver -
+  args:
+    stdin: "{{ lookup('file', 'sealer.kver') }}"
+  when: docker_config_ls.stdout.find('idp_sealer_kver') == -1
+
+
+- name: "get docker secrets"
+  shell: docker secret ls
+  register: docker_secret_ls
+  changed_when: false
+
+
+
+- name: Load binary file idp-backchannel.p12 into variable             
+  local_action:                               
+    module: slurp                             
+    src: "{{ playbook_dir + '/roles/idp-deployment/files/idp-backchannel.p12' }}"
+  register: idp_backchannel
+
+- name: Create idp_backchannel Docker secret
+  shell: base64 --decode | docker secret create idp_backchannel -
+  args:
+    stdin: "{{ idp_backchannel.content }}"
+  when: docker_secret_ls.stdout.find('idp_backchannel') == -1
+
+- name: Load binary file idp-browser.p12 into variable             
+  local_action:                               
+    module: slurp                             
+    src: "{{ playbook_dir + '/roles/idp-deployment/files/idp-browser.p12' }}"
+  register: idp_browser
+
+- name: Create idp_browser Docker secret
+  command: docker secret create idp_browser -
+  args:
+    stdin: "{{ idp_browser.content }}"
+  when: docker_secret_ls.stdout.find('idp_browser') == -1
+
+- name: Create idp_encryption key Docker secret
+  command: docker secret create idp_encryption -
+  args:
+    stdin: "{{ lookup('file', 'idp-encryption.key') }}"
+  when: docker_secret_ls.stdout.find('idp_encryption') == -1
+
+- name: Create idp_signing Docker secret
+  command: docker secret create idp_signing -
+  args:
+    stdin: "{{ lookup('file', 'idp-signing.key') }}"
+  when: docker_secret_ls.stdout.find('idp_signing') == -1
+
+
+- name: Load binary file sealer.jks into variable             
+  local_action:                               
+    module: slurp                             
+    src: "{{ playbook_dir + '/roles/idp-deployment/files/sealer.jks' }}"
+  register: idp_sealer
+
+- name: Create idp_sealer Docker secret
+  command: docker secret create idp_sealer_jks -
+  args:
+    stdin: "{{ idp_sealer.content }}"
+  when: docker_secret_ls.stdout.find('idp_sealer_jks') == -1
+
+
+- name: "get docker services"
+  shell: docker service ls
+  register: docker_service_ls
+  changed_when: false
+
+- name: "Start the IdP Service"
+  shell: |
+    docker service create --name idp \
+     --detach \
+     --config idp_sealer_kver \
+     --secret idp_backchannel \
+     --secret idp_browser \
+     --secret idp_encryption \
+     --secret idp_signing \
+     --secret idp_sealer_jks \
+     --publish 4443:4443 \
+     --env JETTY_MAX_HEAP=64m \
+     --env JETTY_BROWSER_SSL_KEYSTORE_PASSWORD=password \
+     --env JETTY_BACKCHANNEL_SSL_KEYSTORE_PASSWORD=password \
+     admin-swarm.local/idp
+  when: docker_service_ls.stdout.find('idp') == -1
+
+- name: "Kick off a Jenkins build"
+  uri:
+    url: https://10.211.56.10:8443/job/idp-in-a-box/build?delay=0sec
+    method: POST
+    force_basic_auth: yes
+    user: "{{ jenkinsUser }}"
+    password: "{{ jenkinsPassword }}"
+    validate_certs: no
+    status_code: 201

@@ -1,0 +1,160 @@
+---
+- name: install Java JDK
+  yum: 
+    name: java-1.8.0-openjdk
+    state: present
+
+- name: install Git
+  yum: 
+    name: git
+    state: present
+
+- name: Wait 300 seconds for port 8443 to become open on the host, don't start checking for 10 seconds
+  wait_for:
+    host: 10.211.56.10
+    port: 8443
+    delay: 10
+
+- name: wait for service to boot
+  uri:
+    url: "https://10.211.56.10:8443"
+    status_code: 403
+    validate_certs: False
+  register: result
+  until: result is succeeded
+  retries: 8
+  delay: 20
+
+- name: Check the status of the Jenkins credentials
+  uri:
+    url: "https://10.211.56.10:8443/credentials/store/system/domain/_/credential/jenkins-ssh-key/"
+    status_code: 200, 403, 404
+    user: "{{ jenkinsUser }}"
+    password: "{{ jenkinsPassword }}"
+    force_basic_auth: yes
+    validate_certs: False
+  register: cred_result
+
+- name: Creates sshkey
+  local_action: shell openssl genrsa -out /dev/stdout 2048
+  register: jenkins_key
+  when : cred_result.status == 404
+
+- name: Creates jenkins pubkey
+  shell: ssh-keygen -y -f /dev/stdin
+  args:
+    stdin: "{{ jenkins_key.stdout }}"
+  register: jenkins_pub
+  when: jenkins_key.stdout is defined
+
+- name: Add the user 'jenkins'
+  user:
+    name: jenkins
+    groups: docker
+  register: user
+
+- name: set Jenkin's pub key
+  authorized_key:
+    user: jenkins
+    key: '{{ jenkins_pub.stdout }}'
+    state: present
+    exclusive: True
+  when: jenkins_pub.stdout is defined
+
+- name: Create a Jenkins credential out of the private key
+  uri:
+    url: https://10.211.56.10:8443/credentials/store/system/domain/_/createCredentials
+    method: POST
+    user: "{{ jenkinsUser }}"
+    password: "{{ jenkinsPassword }}"
+    body: >
+        <com.cloudbees.jenkins.plugins.sshcredentials.impl.BasicSSHUserPrivateKey plugin="ssh-credentials@1.13">
+          <scope>GLOBAL</scope>
+          <id>jenkins-ssh-key</id>
+          <description>This is an example ssh key credential</description>
+          <username>jenkins</username>
+          <privateKeySource class="com.cloudbees.jenkins.plugins.sshcredentials.impl.BasicSSHUserPrivateKey$DirectEntryPrivateKeySource">
+            <privateKey>{{ jenkins_key.stdout }}</privateKey>
+          </privateKeySource>
+        </com.cloudbees.jenkins.plugins.sshcredentials.impl.BasicSSHUserPrivateKey>
+    force_basic_auth: yes
+    headers:
+      Content-Type: "application/xml"
+    #status_code: 201
+    #body_format: json
+    validate_certs: no
+  when: cred_result.status == 404
+
+- name: Creates jenkins home directory
+  file:
+    path: /var/jenkins
+    state: directory
+    owner: "jenkins"
+    group: "jenkins"
+
+- name: Check the status of the Jenkins worker node
+  uri:
+    url: "https://10.211.56.10:8443/computer/test2/"
+    status_code: 200, 403, 404
+    user: "{{ jenkinsUser }}"
+    password: "{{ jenkinsPassword }}"
+    validate_certs: False
+    force_basic_auth: yes
+  register: node_result
+
+- name: Create a Jenkins slave
+  uri:
+    url: https://10.211.56.10:8443/computer/doCreateItem?name=test2&type=hudson.slaves.DumbSlave
+    method: POST
+    user: "{{ jenkinsUser }}"
+    password: "{{ jenkinsPassword }}"
+    body: >
+        json={  
+          "name":"jenkins-worker-1",
+          "nodeDescription":"",
+          "numExecutors":"1",
+          "remoteFS":"/var/jenkins",
+          "labelString":"docker",
+          "mode":"NORMAL",
+          "":[  
+              "hudson.plugins.sshslaves.SSHLauncher",
+              "hudson.slaves.RetentionStrategy$Always"
+          ],
+          "launcher":{  
+              "stapler-class":"hudson.plugins.sshslaves.SSHLauncher",
+              "$class":"hudson.plugins.sshslaves.SSHLauncher",
+              "host":"10.211.56.11",
+              "credentialsId":"jenkins-ssh-key",
+              "":"3",
+              "sshHostKeyVerificationStrategy":{  
+                "stapler-class":"hudson.plugins.sshslaves.verifiers.NonVerifyingKeyVerificationStrategy",
+                "$class":"hudson.plugins.sshslaves.verifiers.NonVerifyingKeyVerificationStrategy"
+              },
+              "port":"22",
+              "javaPath":"",
+              "jvmOptions":"",
+              "prefixStartSlaveCmd":"",
+              "suffixStartSlaveCmd":"",
+              "launchTimeoutSeconds":"",
+              "maxNumRetries":"",
+              "retryWaitTime":"",
+              "tcpNoDelay":true,
+              "workDir":""
+          },
+          "retentionStrategy":{  
+              "stapler-class":"hudson.slaves.RetentionStrategy$Always",
+              "$class":"hudson.slaves.RetentionStrategy$Always"
+          },
+          "nodeProperties":{  
+              "stapler-class-bag":"true"
+          },
+          "type":"hudson.slaves.DumbSlave"
+        }
+    force_basic_auth: yes
+    headers:
+      Content-Type: "application/x-www-form-urlencoded"
+    status_code: 302
+    body_format: raw
+    validate_certs: no
+  when: node_result.status == 404
+

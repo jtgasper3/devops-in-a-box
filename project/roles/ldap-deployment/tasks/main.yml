@@ -1,0 +1,12 @@
+---
+
+- name: "get docker services"
+  shell: docker service ls
+  register: docker_service_ls
+  changed_when: false
+
+- name: "Start the Directory service"
+  shell: |
+    docker service create --name ldap \
+      jtgasper3/389ds-sample:latest
+  when: docker_service_ls.stdout.find('ldap') == -1

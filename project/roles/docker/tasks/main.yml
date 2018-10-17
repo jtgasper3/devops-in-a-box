@@ -1,0 +1,44 @@
+---
+- name: Install Docker repository
+  yum_repository:
+    name: docker-ce-stable
+    description: Docker CE Stable Repo
+    baseurl: https://download.docker.com/linux/centos/7/$basearch/stable
+    gpgcheck: yes
+    gpgkey: https://download.docker.com/linux/centos/gpg
+
+- name: Install Docker CE
+  yum: 
+    name: docker-ce
+    state: present
+
+- name: Start and enable Docker service
+  systemd:
+    name: docker.service
+    state: started
+    enabled: yes
+
+- name: Add docker group
+  group: name=docker state=present
+  become: true
+
+- name: Restart Docker service
+  service: name=docker state=started
+
+- name: "get docker info"
+  shell: docker info
+  register: docker_info
+  changed_when: false
+
+- name: Creates directory
+  file:
+    path: /etc/docker/certs.d/admin-swarm.local/
+    state: directory
+  become: true
+
+- name: Create trust registry certificate
+  copy:
+    content: "{{ host_cert }}"
+    dest: /etc/docker/certs.d/admin-swarm.local/ca.crt
+  become: true
+  #when: docker_config_ls.stdout.find('host.crt') == -1

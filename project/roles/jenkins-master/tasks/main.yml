@@ -1,0 +1,66 @@
+---
+- name: Creates directory
+  file:
+    path: /var/docker-data/jenkins
+    state: directory
+
+- name: Creates jenkins home directory
+  file:
+    path: /var/docker-data/jenkins/jenkins_home
+    state: directory
+    owner: "1500"
+    group: "1500"
+
+- name: "get docker configs"
+  shell: docker config ls
+  register: docker_config_ls
+  changed_when: false
+
+- name: Create host cert Docker config
+  command: docker config create host.crt -
+  args:
+    stdin: "{{ host_cert }}"
+  when: docker_config_ls.stdout.find('host.crt') == -1
+
+- name: "get docker secrets"
+  shell: docker secret ls
+  register: docker_secret_ls
+  changed_when: false
+
+- name: Create host key Docker secret
+  command: docker secret create host.key -
+  args:
+    stdin: "{{ host_key }}"
+  when: docker_secret_ls.stdout.find('host.key') == -1
+
+- name: Create jenkins-user Docker secret
+  command: docker secret create jenkins-user -
+  args:
+    stdin: "{{ jenkinsUser }}"
+  when: docker_secret_ls.stdout.find('jenkins-user') == -1
+
+- name: Create jenkins-password Docker secret
+  command: docker secret create jenkins-password -
+  args:
+    stdin: "{{ jenkinsPassword }}"
+  when: docker_secret_ls.stdout.find('jenkins-password') == -1
+
+- name: "get docker services"
+  shell: docker service ls
+  register: docker_service_ls
+  changed_when: false
+
+- name: "Start the Jenkins Service"
+  shell: |
+    docker service create --name jenkins \
+     --config host.crt \
+     --secret host.key \
+     --secret jenkins-user \
+     --secret jenkins-password \
+     --mount type=bind,source=/var/docker-data/jenkins/jenkins_home,target=/var/jenkins_home \
+     --publish 8443:8443 \
+     --user 1500 \
+     --group 1500 \
+     --env JENKINS_OPTS="-Dhudson.DNSMultiCast.disabled=true --httpPort=-1 --httpsPort=8443 --httpsCertificate=/host.crt --httpsPrivateKey=/run/secrets/host.key" \
+     jtgasper3/devops-in-a-box-jenkins
+  when: docker_service_ls.stdout.find('jenkins') == -1

@@ -1,0 +1,42 @@
+---
+- name: "create primary swarm manager"
+  shell: docker swarm init --advertise-addr {{ ansible_eth1['ipv4']['address'] }}
+  when: "docker_info.stdout.find('Swarm: inactive') != -1"
+
+- name: Enable Docker Swarm Access
+  firewalld:
+    port: 2377/tcp
+    permanent: true
+    immediate: true
+    state: enabled
+
+- name: Setup daemon
+  copy:
+    src: daemon.json
+    dest: /etc/docker/
+
+- name: Place ca certificate
+  copy:
+    src: ca.pem
+    dest: /etc/docker/certs.d/
+
+- name: Place server certificate
+  copy:
+    src: cert.pem
+    dest: /etc/docker/certs.d/
+
+- name: Place server key
+  copy:
+    src: key.pem
+    dest: /etc/docker/certs.d/
+
+- name: Restart Docker service
+  service: name=docker state=restarted
+
+- name: "get docker swarm manager token"
+  shell: docker swarm join-token -q manager
+  register: manager_token
+
+- name: "get docker swarm worker token"
+  shell: docker swarm join-token -q worker
+  register: worker_token
