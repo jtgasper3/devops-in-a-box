@@ -2,10 +2,6 @@
 - hosts: all
   remote_user: root
   become: true
-  # vars:
-  #   docker_edition: 'ce'
-  #   docker_package: "docker-{{ docker_edition }}"
-  #   docker_package_state: present
   vars:
     host_cert: "{{ lookup('file', playbook_dir + '/../miscellaneous/host-cert.pem') }}"
   roles:
@@ -18,12 +14,65 @@
   vars:
     host_cert: "{{ lookup('file', playbook_dir + '/../miscellaneous/host-cert.pem') }}"
     host_key:  "{{ lookup('file', playbook_dir + '/../miscellaneous/host-key.pem') }}"
+    iam_swarm_client_cert: "{{ lookup('file', playbook_dir + '/../miscellaneous/client-cert.pem') }}"
+    iam_swarm_client_key:  "{{ lookup('file', playbook_dir + '/../miscellaneous/client-key.pem') }}"
+    iam_swarm_trust_ca: "{{ lookup('file', playbook_dir + '/../miscellaneous/ca.pem') }}"
     jenkinsUser: admin
     jenkinsPassword: password
   roles:
   - docker-first-manager
   - jenkins-master
   - docker-registry
+  post_tasks:
+  - name: Wait 300 seconds for port 8443 to become open on the host, don't start checking for 10 seconds
+    wait_for:
+      host: 10.211.56.10
+      port: 8443
+      delay: 10
+
+  - name: wait for service to boot
+    uri:
+      url: "https://10.211.56.10:8443"
+      status_code: 403
+      validate_certs: False
+    register: result
+    until: result is succeeded
+    retries: 8
+    delay: 20
+
+  - name: Check the status of the Jenkins credentials
+    uri:
+      url: "https://10.211.56.10:8443/credentials/store/system/domain/_/credential/iam-swarm/"
+      status_code: 200, 403, 404
+      user: "{{ jenkinsUser }}"
+      password: "{{ jenkinsPassword }}"
+      force_basic_auth: yes
+      validate_certs: False
+    register: cred_result
+
+  - name: Create a Jenkins credential for IAM Docker Swarm
+    uri:
+      url: https://10.211.56.10:8443/credentials/store/system/domain/_/createCredentials
+      method: POST
+      user: "{{ jenkinsUser }}"
+      password: "{{ jenkinsPassword }}"
+      body: >
+          <org.jenkinsci.plugins.docker.commons.credentials.DockerServerCredentials plugin="docker-commons@1.13">
+            <scope>GLOBAL</scope>
+            <id>iam-swarm</id>
+            <description>This is an keyset credential</description>
+            <clientKey>{{ iam_swarm_client_key }}</clientKey>
+            <clientCertificate>{{ iam_swarm_client_cert }}</clientCertificate>
+            <serverCaCertificate>{{ iam_swarm_trust_ca }}</serverCaCertificate>
+          </org.jenkinsci.plugins.docker.commons.credentials.DockerServerCredentials>
+      force_basic_auth: yes
+      headers:
+        Content-Type: "application/xml"
+      #status_code: 201
+      #body_format: json
+      validate_certs: no
+    #when: cred_result.status == 404
+
 
 - hosts: jenkins_worker
   remote_user: root

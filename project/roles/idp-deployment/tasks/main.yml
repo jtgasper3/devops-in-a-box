@@ -75,7 +75,11 @@
   register: docker_secret_ls
   changed_when: false
 
-
+- name: Create secrets.properties Docker secret
+  command: docker secret create idp_secret_properties -
+  args:
+    stdin: "{{ lookup('file', 'secrets.properties') }}"
+  when: docker_config_ls.stdout.find('idp_secret_properties') == -1
 
 - name: Load binary file idp-backchannel.p12 into variable             
   local_action:                               
@@ -136,7 +140,8 @@
   shell: |
     docker service create --name idp \
      --detach \
-     --config idp_sealer_kver \
+     --config src=idp_sealer_kver,dst=/opt/shibboleth-idp/credentials/idp_sealer_kver \
+     --secret idp_secrets_properties \
      --secret idp_backchannel \
      --secret idp_browser \
      --secret idp_encryption \
