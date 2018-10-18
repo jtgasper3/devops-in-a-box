@@ -1,2 +1,4 @@
 .vagrant
 artifacts
+log.txt
+test.retry

@@ -16,7 +16,7 @@
   remote_user: root
   become: true
   vars:
-#    host_cert: "{{ lookup('file', playbook_dir + '/../miscellaneous/host-cert.pem') }}"
+    host_cert: "{{ lookup('file', playbook_dir + '/../miscellaneous/host-cert.pem') }}"
     host_key:  "{{ lookup('file', playbook_dir + '/../miscellaneous/host-key.pem') }}"
     jenkinsUser: admin
     jenkinsPassword: password
