@@ -1,5 +1,15 @@
 ---
 
+- name: "get docker networks"
+  shell: docker network ls
+  register: docker_network_ls
+  changed_when: false
+
+- name: "Create LDAP Network"
+  shell: docker network create --driver=overlay ldap-nw
+  when: docker_network_ls.stdout.find('ldap-nw') == -1
+
+
 - name: "get docker services"
   shell: docker service ls
   register: docker_service_ls
@@ -8,5 +18,6 @@
 - name: "Start the Directory service"
   shell: |
     docker service create --name ldap \
+      --network ldap-nw \
       jtgasper3/389ds-sample:latest
   when: docker_service_ls.stdout.find('ldap') == -1

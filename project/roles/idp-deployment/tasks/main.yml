@@ -69,6 +69,18 @@
     stdin: "{{ lookup('file', 'sealer.kver') }}"
   when: docker_config_ls.stdout.find('idp_sealer_kver') == -1
 
+- name: Create idp-signing.crt Docker config
+  command: docker config create idp_signing_crt -
+  args:
+    stdin: "{{ lookup('file', 'idp-signing.crt') }}"
+  when: docker_config_ls.stdout.find('idp_signing_crt') == -1
+
+- name: Create idp-encryption.crt Docker config
+  command: docker config create idp_encryption_crt -
+  args:
+    stdin: "{{ lookup('file', 'idp-encryption.crt') }}"
+  when: docker_config_ls.stdout.find('idp_encryption_crt') == -1
+
 
 - name: "get docker secrets"
   shell: docker secret ls
@@ -76,10 +88,10 @@
   changed_when: false
 
 - name: Create secrets.properties Docker secret
-  command: docker secret create idp_secret_properties -
+  command: docker secret create idp_secrets_properties -
   args:
     stdin: "{{ lookup('file', 'secrets.properties') }}"
-  when: docker_config_ls.stdout.find('idp_secret_properties') == -1
+  when: docker_secret_ls.stdout.find('idp_secrets_properties') == -1
 
 - name: Load binary file idp-backchannel.p12 into variable             
   local_action:                               
@@ -100,7 +112,7 @@
   register: idp_browser
 
 - name: Create idp_browser Docker secret
-  command: docker secret create idp_browser -
+  shell: base64 --decode | docker secret create idp_browser -
   args:
     stdin: "{{ idp_browser.content }}"
   when: docker_secret_ls.stdout.find('idp_browser') == -1
@@ -125,7 +137,7 @@
   register: idp_sealer
 
 - name: Create idp_sealer Docker secret
-  command: docker secret create idp_sealer_jks -
+  shell: base64 --decode | docker secret create idp_sealer_jks -
   args:
     stdin: "{{ idp_sealer.content }}"
   when: docker_secret_ls.stdout.find('idp_sealer_jks') == -1
@@ -140,7 +152,10 @@
   shell: |
     docker service create --name idp \
      --detach \
-     --config src=idp_sealer_kver,dst=/opt/shibboleth-idp/credentials/idp_sealer_kver \
+     --network ldap-nw \
+     --config src=idp_sealer_kver,target=/opt/shibboleth-idp/credentials/idp_sealer_kver \
+     --config src=idp_signing_crt,target=/opt/shibboleth-idp/credentials/idp_signing_crt \
+     --config src=idp_encryption_crt,target=/opt/shibboleth-idp/credentials/idp_encryption_crt \
      --secret idp_secrets_properties \
      --secret idp_backchannel \
      --secret idp_browser \
@@ -151,7 +166,7 @@
      --env JETTY_MAX_HEAP=64m \
      --env JETTY_BROWSER_SSL_KEYSTORE_PASSWORD=password \
      --env JETTY_BACKCHANNEL_SSL_KEYSTORE_PASSWORD=password \
-     admin-swarm.local/idp
+     admin-swarm.local/iam/shibboleth-idp
   when: docker_service_ls.stdout.find('idp') == -1
 
 - name: "Kick off a Jenkins build"

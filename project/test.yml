@@ -48,7 +48,7 @@
       password: "{{ jenkinsPassword }}"
       force_basic_auth: yes
       validate_certs: False
-    register: cred_result
+    register: iam_warm_cred_result
 
   - name: Create a Jenkins credential for IAM Docker Swarm
     uri:
@@ -71,7 +71,7 @@
       #status_code: 201
       #body_format: json
       validate_certs: no
-    #when: cred_result.status == 404
+    when: iam_warm_cred_result.status == 404
 
 
 - hosts: jenkins_worker
