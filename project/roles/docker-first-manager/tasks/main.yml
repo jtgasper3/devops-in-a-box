@@ -38,6 +38,15 @@
     permanent: true
     state: enabled
 
+- name: Setup systemd override
+  copy:
+    src: docker.conf
+    dest: /etc/systemd/system/docker.service.d/
+
+- name: Reload systemd config
+  systemd:
+    daemon_reload: yes
+
 - name: Setup daemon
   copy:
     src: daemon.json
