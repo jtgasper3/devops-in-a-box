@@ -4,7 +4,13 @@
 
 Testing out the TIER IAM stack or DevOps (Jenkins or Docker) has never been easier.
 
-TODO
+[TODO]
+
+Notes:
+
+- This project is not an example of Ansible best practices. There are likely many optimizations that can be made. Feel free to contribute a pull request if you'd like to suggest some.
+- Jenkin's needs some additional configuration post start-up. Login and apply Jenkins and plugin updates if you plan to use the deployment for real.
+- None of the private keys provided in this project should be used for real. Generate your own keys and certs before deploying if you base a real deployment off this project.
 
 ## Starting Up
 
