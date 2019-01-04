@@ -21,6 +21,7 @@
     jenkinsPassword: password
   roles:
   - docker-first-manager
+  - visualizer-deployment
   - jenkins-master
   - docker-registry
   post_tasks:
