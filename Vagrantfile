@@ -15,19 +15,20 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |cfg|
       config.vm.hostname = hostname
       config.ssh.insert_key = false
 
-    #  config.vm.provider "virtualbox" do |v|
-    #    v.name = "hostname"
-    #    v.memory = info[:mem]
-    #    v.cpus = info[:cpus]
-    #    v.customize ["modifyvm", :id, "--natdnshostresolver1", "on"]
-    #    v.customize ["modifyvm", :id, "--ioapic", "on"]
-    #  end
+      config.vm.provider "virtualbox" do |v|
+        v.name = hostname
+        v.memory = info[:mem]
+        v.cpus = info[:cpus]
+        v.customize ["modifyvm", :id, "--vrde", "off"]
+      end
 
-      config.vm.provider "parallels" do |prl|
-        prl.name = hostname 
-        prl.memory = info[:mem]
-        prl.cpus = info[:cpus]
-        prl.customize ["set", :id, "--isolate-vm", "on"]
+      config.vm.provider "parallels" do |v|
+        v.name = hostname 
+        v.memory = info[:mem]
+        v.cpus = info[:cpus]
+        v.customize ["set", :id, "--isolate-vm", "on"]
+      end
+
       end
 
     end
