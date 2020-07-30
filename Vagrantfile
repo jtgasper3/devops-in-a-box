@@ -29,6 +29,11 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |cfg|
         v.customize ["set", :id, "--isolate-vm", "on"]
       end
 
+      config.vm.provider "vmware" do |v|
+        v.name = hostname 
+        v.memory = info[:mem]
+        v.cpus = info[:cpus]
+        v.customize ["set", :id, "--isolate-vm", "on"]
       end
 
     end
